@@ -12,7 +12,7 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 
 # Install dependencies (ignoring scripts to prevent running the prepare script)
-RUN pnpm install --frozen-lockfile --ignore-scripts
+RUN pnpm install --no-frozen-lockfile --ignore-scripts
 
 # Copy the rest of the application source code
 COPY . .
@@ -35,7 +35,7 @@ COPY --from=builder /app/package.json /app/package.json
 COPY --from=builder /app/pnpm-lock.yaml /app/pnpm-lock.yaml
 
 # Install only production dependencies
-RUN pnpm install --prod --frozen-lockfile --ignore-scripts
+RUN pnpm install --prod --no-frozen-lockfile --ignore-scripts
 
 # Set environment variables for API key and custom API URL if needed
 

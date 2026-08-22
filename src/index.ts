@@ -23,6 +23,7 @@ import {
   setManagedOAuthApiKey,
   type CredentialSession,
 } from './session-credential';
+import { packageCrawlResultsToZip, type CrawlPageItem } from './zip-crawler';
 
 dotenv.config({ debug: false, quiet: true });
 
@@ -2714,6 +2715,118 @@ Crawl results can be large; use conservative limits when full-site coverage is u
       timeout
     );
     return asText(res);
+  },
+});
+
+server.addTool({
+  name: 'firecrawl_crawl_zip',
+  annotations: {
+    title: 'Crawl documentation hierarchy and package to ZIP',
+    readOnlyHint: false,
+    openWorldHint: true,
+    destructiveHint: false,
+  },
+  description: `
+Crawl a website or documentation hierarchy starting at a URL, organize all crawled pages into a structured directory tree with nested Markdown files, generate a root README.md index linking to every page, and package everything into a compressed .zip archive.
+
+Options include maxDiscoveryDepth (default: 2), page limit, allowSubdomains, crawlEntireDomain, outputPath (optional path on server/filesystem to save the .zip file), and includeBase64 (boolean, default: true).
+
+Returns summary metadata (total pages crawled, file hierarchy list, zip size in bytes) and base64-encoded zip data.
+`,
+  parameters: z.object({
+    url: z.string().url(),
+    maxDiscoveryDepth: z.number().optional().default(2),
+    limit: z.number().optional(),
+    allowSubdomains: z.boolean().optional(),
+    crawlEntireDomain: z.boolean().optional().default(true),
+    includePaths: z.array(z.string()).optional(),
+    excludePaths: z.array(z.string()).optional(),
+    ignoreQueryParameters: z.boolean().optional(),
+    deduplicateSimilarURLs: z.boolean().optional(),
+    outputPath: z.string().optional(),
+    includeBase64: z.boolean().optional().default(true),
+  }),
+  execute: async (args, { session, log }) => {
+    const { url, maxDiscoveryDepth, limit, outputPath, includeBase64, ...options } = args as {
+      url: string;
+      maxDiscoveryDepth?: number;
+      limit?: number;
+      outputPath?: string;
+      includeBase64?: boolean;
+      [key: string]: unknown;
+    };
+    const client = getClient(session);
+
+    log.info('Starting hierarchical crawl & zip', { url, maxDiscoveryDepth, limit });
+
+    const crawlPayload: Record<string, unknown> = {
+      url,
+      maxDiscoveryDepth: maxDiscoveryDepth ?? 2,
+      crawlEntireDomain: options.crawlEntireDomain ?? true,
+      scrapeOptions: {
+        formats: ['markdown'],
+      },
+      origin: ORIGIN,
+    };
+    if (limit && limit > 0) {
+      crawlPayload.limit = limit;
+    }
+    if (options.includePaths) {
+      crawlPayload.includePaths = options.includePaths;
+    }
+    if (options.excludePaths) {
+      crawlPayload.excludePaths = options.excludePaths;
+    }
+    if (options.allowSubdomains !== undefined) {
+      crawlPayload.allowSubdomains = options.allowSubdomains;
+    }
+    if (options.ignoreQueryParameters !== undefined) {
+      crawlPayload.ignoreQueryParameters = options.ignoreQueryParameters;
+    }
+    if (options.deduplicateSimilarURLs !== undefined) {
+      crawlPayload.deduplicateSimilarURLs = options.deduplicateSimilarURLs;
+    }
+
+    const started = await (client as any).http.post('/v2/crawl', crawlPayload);
+    const crawlId = started?.data?.id;
+    if (!crawlId) {
+      throw new UserError(`Failed to start crawl job: ${JSON.stringify(started?.data ?? started)}`);
+    }
+
+    log.info(`Crawl job started with ID: ${crawlId}. Polling completion...`);
+    const statusRes = await waitForCrawlCompletionWithOrigin(client, crawlId, 2, 600);
+
+    if (statusRes.status !== 'completed') {
+      throw new UserError(`Crawl job ${crawlId} ended with status: ${statusRes.status} (error: ${statusRes.error || 'unknown'})`);
+    }
+
+    const pages = (statusRes.data as CrawlPageItem[]) || [];
+    if (pages.length === 0) {
+      return asText({
+        success: false,
+        crawlId,
+        message: 'Crawl completed but returned 0 pages.',
+      });
+    }
+
+    log.info(`Crawl completed with ${pages.length} pages. Building folder hierarchy & zip archive...`);
+    const zipResult = await packageCrawlResultsToZip(pages, url, outputPath);
+
+    const resultPayload: Record<string, unknown> = {
+      success: true,
+      crawlId,
+      url,
+      totalPages: zipResult.totalPages,
+      zipSizeBytes: zipResult.zipSizeBytes,
+      files: zipResult.files,
+      savedToPath: zipResult.outputPath,
+    };
+
+    if (includeBase64 !== false) {
+      resultPayload.zipBase64 = zipResult.zipBuffer.toString('base64');
+    }
+
+    return asText(resultPayload);
   },
 });
 

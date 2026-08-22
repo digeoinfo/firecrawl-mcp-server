@@ -28,6 +28,7 @@
   "license": "MIT",
   "dependencies": {
     "@mendable/firecrawl-js": "4.25.2",
+    "archiver": "^7.0.1",
     "dotenv": "^17.2.2",
     "fastmcp": "4.3.2",
     "zod": "^4.1.5"
@@ -58,6 +59,7 @@
   },
   "homepage": "https://github.com/firecrawl/firecrawl-mcp-server#readme",
   "devDependencies": {
+    "@types/archiver": "^6.0.3",
     "@types/node": "^24.3.1",
     "@typescript-eslint/eslint-plugin": "8.48.1",
     "@typescript-eslint/parser": "8.48.1",
