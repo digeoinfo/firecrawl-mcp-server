@@ -2271,7 +2271,7 @@ async function getCrawlStatusWithOrigin(
   const body = (res?.data ?? {}) as any;
   const initialDocs = Array.isArray(body.data) ? body.data : [];
 
-  if (!body.next) {
+  if (!body.next || body.status !== 'completed') {
     return {
       id: jobId,
       status: body.status,
@@ -2286,14 +2286,28 @@ async function getCrawlStatusWithOrigin(
 
   const docs = initialDocs.slice();
   let current = body.next as string | null;
+  const visited = new Set<string>();
   while (current) {
-    const pageRes = await (client as any).http.get(current, ORIGIN_HEADERS);
+    let requestPath = current;
+    if (current.startsWith('http://') || current.startsWith('https://')) {
+      try {
+        const parsedUrl = new URL(current);
+        requestPath = `${parsedUrl.pathname}${parsedUrl.search}`;
+      } catch {
+        requestPath = current;
+      }
+    }
+    if (visited.has(requestPath)) break;
+    visited.add(requestPath);
+
+    const pageRes = await (client as any).http.get(requestPath, ORIGIN_HEADERS);
     const payload = (pageRes?.data ?? {}) as any;
     if (!payload.success) break;
 
     const pageData = Array.isArray(payload.data)
       ? payload.data
       : payload.data?.pages || [];
+    if (pageData.length === 0) break;
     docs.push(...pageData);
     current =
       payload.next ??
