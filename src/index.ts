@@ -783,10 +783,7 @@ const searchDomainSchema = z
   .toLowerCase()
   .min(1)
   .max(253)
-  .regex(
-    /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/,
-    'Domain must be a valid hostname without protocol or path'
-  );
+  .refine((v) => /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/.test(v), 'Domain must be a valid hostname without protocol or path');
 
 function buildSearchQueryWithDomains(
   query: string,
@@ -2355,10 +2352,7 @@ const feedbackIssueSchema = z
   .trim()
   .min(1)
   .max(80)
-  .regex(
-    /^[a-z0-9][a-z0-9_-]*$/,
-    'Issue codes must use lowercase letters, numbers, underscores, or hyphens'
-  );
+  .refine((v) => /^[a-z0-9][a-z0-9_-]*$/.test(v), 'Issue codes must use lowercase letters, numbers, underscores, or hyphens');
 
 const valuableSourceSchema = z.object({
   url: z.string().url(),
@@ -2414,7 +2408,7 @@ Eligibility is limited to successful searches within the feedback age window. Th
     parameters: z.object({
       searchId: z
         .string()
-        .uuid('searchId must be the UUID returned by firecrawl_search'),
+        .refine((v) => /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(v), 'searchId must be the UUID returned by firecrawl_search'),
       rating: z.enum(['good', 'bad', 'partial']),
       valuableSources: z
         .array(
@@ -2546,7 +2540,7 @@ Returns submission status, feedback ID, and accounting fields.
 `,
     parameters: z.object({
       endpoint: z.enum(['search', 'scrape', 'parse', 'map']),
-      jobId: z.string().uuid('jobId must be the UUID returned by Firecrawl'),
+      jobId: z.string().refine((v) => /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(v), 'jobId must be the UUID returned by Firecrawl'),
       rating: z.enum(['good', 'bad', 'partial']),
       issues: z.array(feedbackIssueSchema).max(20).optional(),
       tags: z.array(feedbackIssueSchema).max(20).optional(),
